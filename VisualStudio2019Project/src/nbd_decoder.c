@@ -47,20 +47,20 @@ short median(short* buf, int size) {
 	return ret;
 }
 
-short maximum(short* buf, int size) {
+short maximum(short* buf, int size, int base) {
 	short ret = 0;
 	int i;
 
 	for (i = 0; i < size; i++) {
-		if (abs(ret) < abs(buf[i])) {
-			ret = buf[i];
+		if (abs(ret) < abs(buf[i] - base)) {
+			ret = buf[i] - base;
 		}
 	}
 
 	return ret;
 }
 
-int am_decode(struct RIFF_HEADER* header, FILE* fin, FILE* fout) {
+int am_decode(struct RIFF_HEADER* header, int quant_bit, FILE* fin, FILE* fout) {
 	int ret = 0;
 	int i;
 	int data_cnt = 0;			//推定中のサンプル数
@@ -85,9 +85,10 @@ int am_decode(struct RIFF_HEADER* header, FILE* fin, FILE* fout) {
 	short* in_buf2;				//全chの入力値バッファ
 	int bps_cnt = 0;			//bpsカウント(デバッグ)
 	int last_detect = 0x7FFFFFFF;	//最後にデータ出力が確定したサンプル
+	int base_flag = 0;
 
-	out_buf = malloc(sizeof(short) * 262144);
-	memset(out_buf, 0, 262144);
+	out_buf = malloc(sizeof(short) * BIOS_SIZE_SHORT);
+	memset(out_buf, 0, BIOS_SIZE_SHORT);
 	memset(med, 0, sizeof(int) * 16);
 	memset(med_lv, 0, sizeof(int) * 16);
 
@@ -117,134 +118,238 @@ int am_decode(struct RIFF_HEADER* header, FILE* fin, FILE* fout) {
 		data_cnt++;
 		data_cnt = data_cnt % 64;
 
-		//差分値が、振幅の取り得る値の最低値/3よりも大きい場合(pilot_signal検出モード)
-		if (abs(dif) > amp_limit * th0 && search_step == 0) {
-			med[med_cnt] = median(&in_buf[i-data_cnt+1], data_cnt-1);
-			//med[med_cnt] = in_buf[i - (int)(data_cnt / 2.0)];
+		if (quant_bit == 2) {
 
-			if (med[med_cnt] > amp_limit * th0) {
-				med_lv[med_cnt] = 1;
-			}
-			else if (med[med_cnt] < -amp_limit * th0) {
-				med_lv[med_cnt] = -1;
-			}
-			else {
-				med_lv[med_cnt] = 0;
-			}
+			//差分値が、振幅の取り得る値の最低値/3よりも大きい場合(pilot_signal検出モード)
+			if (abs(dif) > amp_limit * th0 && search_step == 0) {
+				med[med_cnt] = median(&in_buf[i - data_cnt + 1], data_cnt == 0 ? 1 : data_cnt - 1);
+				//med[med_cnt] = in_buf[i - (int)(data_cnt / 2.0)];
 
-			//check pilot signal
-			if (med_lv[med_cnt] == 0 &&
-				med_lv[(med_cnt + 15) % 16] == -1 &&
-				med_lv[(med_cnt + 14) % 16] == 0 &&
-				med_lv[(med_cnt + 13) % 16] == -1 &&
-				med_lv[(med_cnt + 12) % 16] == 0 &&
-				med_lv[(med_cnt + 11) % 16] == 1 &&
-				med_lv[(med_cnt + 10) % 16] == 0 &&
-				med_lv[(med_cnt + 9) % 16] == 1 &&
-				med_lv[(med_cnt + 8) % 16] == 0
-				) {
-				search_step = 1;
-				amp_limit = med[(med_cnt + 11) % 16] * SAMPLE_MAX / 31504;
-				//base = med[(med_cnt + 14) % 16];
-				base = med[(med_cnt + 11) % 16] * 223 / 1969;
-				last_detect = i;
-			}
-
-			med_cnt++;
-			med_cnt = med_cnt % 16;
-
-			data_cnt = 0;
-		}
-		//差分値が、振幅の取り得る値の最低値/3よりも大きい場合(decodeモード)
-		else if (abs(dif) > amp_limit * th0 && search_step == 1) {
-			med[med_cnt] = median(&in_buf[i - data_cnt + 1], data_cnt - 1) - base;
-			//med[med_cnt] = in_buf[i - (int)(data_cnt / 2.0 ) ] - base;
-
-			if (med_lv[(med_cnt + 15) % 16] == 0 &&
-				med_lv[(med_cnt + 14) % 16] == 1) {
-				out = out << 2;
-				if (med[med_cnt] > 0) {
-					med[med_cnt] -= 2 * amp_limit;
+				if (med[med_cnt] > amp_limit * th0) {
+					med_lv[med_cnt] = 1;
+				}
+				else if (med[med_cnt] < -amp_limit * th0) {
+					med_lv[med_cnt] = -1;
+				}
+				else {
+					med_lv[med_cnt] = 0;
 				}
 
-				if (med[med_cnt] < -amp_limit * th4) {
-					out += 0b11;
+				//check pilot signal
+				if (med_lv[med_cnt] == 0 &&
+					med_lv[(med_cnt + 15) % 16] == -1 &&
+					med_lv[(med_cnt + 14) % 16] == 0 &&
+					med_lv[(med_cnt + 13) % 16] == -1 &&
+					med_lv[(med_cnt + 12) % 16] == 0 &&
+					med_lv[(med_cnt + 11) % 16] == 1 &&
+					med_lv[(med_cnt + 10) % 16] == 0 &&
+					med_lv[(med_cnt + 9) % 16] == 1 &&
+					med_lv[(med_cnt + 8) % 16] == 0
+					) {
+					search_step = 1;
+					amp_limit = med[(med_cnt + 11) % 16] * SAMPLE_MAX / 31504;
+					//base = med[(med_cnt + 14) % 16];
+					base = med[(med_cnt + 11) % 16] * 223 / 1969;
+					last_detect = i;
 				}
-				else if (med[med_cnt] < -amp_limit * th3) {
-					out += 0b10;
+
+				med_cnt++;
+				med_cnt = med_cnt % 16;
+
+				data_cnt = 0;
+			}
+			//差分値が、振幅の取り得る値の最低値/3よりも大きい場合(decodeモード)
+			else if (abs(dif) > amp_limit * th0 && search_step == 1) {
+				med[med_cnt] = median(&in_buf[i - data_cnt + 1], data_cnt - 1) - base;
+				//med[med_cnt] = in_buf[i - (int)(data_cnt / 2.0 ) ] - base;
+
+				if (med_lv[(med_cnt + 15) % 16] == 0 &&
+					med_lv[(med_cnt + 14) % 16] == 1) {
+					out = out << quant_bit;
+					if (med[med_cnt] > 0) {
+						med[med_cnt] -= 2 * amp_limit;
+					}
+
+					if (med[med_cnt] < -amp_limit * th4) {
+						out += 0b11;
+					}
+					else if (med[med_cnt] < -amp_limit * th3) {
+						out += 0b10;
+					}
+					else if (med[med_cnt] < -amp_limit * th2) {
+						out += 0b01;
+					}
+					else if (med[med_cnt] < -amp_limit * th1) {
+						out += 0b00;
+
+					}
+					else {
+						search_step = 0;
+						med_cnt = 0;
+						memset(med, 0, sizeof(int) * 16);
+						memset(med_lv, 0, sizeof(int) * 16);
+
+						continue;
+					}
+
+					out_cnt += quant_bit;
+					bps_cnt += quant_bit;
 				}
-				else if (med[med_cnt] < -amp_limit * th2) {
-					out += 0b01;
+				if (med_lv[(med_cnt + 15) % 16] == 0 &&
+					med_lv[(med_cnt + 14) % 16] == -1) {
+					out = out << quant_bit;
+					if (med[med_cnt] < 0) {
+						med[med_cnt] += 2 * amp_limit;
+					}
+
+					if (med[med_cnt] > amp_limit * th4) {
+						out += 0b11;
+					}
+					else if (med[med_cnt] > amp_limit * th3) {
+						out += 0b10;
+					}
+					else if (med[med_cnt] > amp_limit * th2) {
+						out += 0b01;
+					}
+					else if (med[med_cnt] > amp_limit * th1) {
+						out += 0b00;
+					}
+					else {
+						search_step = 0;
+						med_cnt = 0;
+						memset(med, 0, sizeof(int) * 16);
+						memset(med_lv, 0, sizeof(int) * 16);
+
+						continue;
+					}
+
+					out_cnt += quant_bit;
+					bps_cnt += quant_bit;
+				}
+
+				if (med[med_cnt] > amp_limit * th1) {
+					med_lv[med_cnt] = 1;
 				}
 				else if (med[med_cnt] < -amp_limit * th1) {
-					out += 0b00;
+					med_lv[med_cnt] = -1;
 				}
 				else {
-					search_step = 0;
-					med_cnt = 0;
-					memset(med, 0, sizeof(int) * 16);
-					memset(med_lv, 0, sizeof(int) * 16);
-
-					continue;
+					med_lv[med_cnt] = 0;
+					base = med[med_cnt] + base;
 				}
 
-				out_cnt += 2;
-				bps_cnt += 2;
+				if (out_cnt % 16 == 0 && abs(med_lv[med_cnt]) == 1) {
+					out_buf[(int)(out_cnt / 16) - 1] = out;
+
+					out = 0;
+				}
+
+				med_cnt++;
+				med_cnt = med_cnt % 16;
+
+				data_cnt = 0;
+				last_detect = i;
 			}
-			if (med_lv[(med_cnt + 15) % 16] == 0 &&
-				med_lv[(med_cnt + 14) % 16] == -1) {
-				out = out << 2;
-				if (med[med_cnt] < 0) {
-					med[med_cnt] += 2 * amp_limit;
+		}
+		else if (quant_bit == 1) {
+
+			//入力の絶対値が、振幅の取り得る値の最低値/3よりも小さい場合(pilot_signal検出モード)
+			if (abs(in_buf[i]) < amp_limit * th0 && base_flag == 1 && search_step == 0) {
+				med[med_cnt] = maximum(&in_buf[i - data_cnt + 1], data_cnt == 0 ? 1 : data_cnt - 1, 0);
+				//med[med_cnt] = in_buf[i - (int)(data_cnt / 2.0)];
+
+				if (med[med_cnt] > amp_limit * th0) {
+					med_lv[med_cnt] = 1;
+				}
+				else if (med[med_cnt] < -amp_limit * th0) {
+					med_lv[med_cnt] = -1;
 				}
 
-				if (med[med_cnt] > amp_limit * th4) {
-					out += 0b11;
-				}
-				else if (med[med_cnt] > amp_limit * th3) {
-					out += 0b10;
-				}
-				else if (med[med_cnt] > amp_limit * th2) {
-					out += 0b01;
-				}
-				else if (med[med_cnt] > amp_limit * th1) {
-					out += 0b00;
-				}
-				else {
-					search_step = 0;
-					med_cnt = 0;
-					memset(med, 0, sizeof(int) * 16);
-					memset(med_lv, 0, sizeof(int) * 16);
-
-					continue;
+				//check pilot signal
+				if (med_lv[med_cnt] == -1 &&
+					med_lv[(med_cnt + 15) % 16] == -1 &&
+					med_lv[(med_cnt + 14) % 16] == 1 &&
+					med_lv[(med_cnt + 13) % 16] == 1
+					) {
+					search_step = 1;
+					amp_limit = med[(med_cnt + 14) % 16] * SAMPLE_MAX / 31504;
+					//base = med[(med_cnt + 14) % 16];
+					base = med[(med_cnt + 14) % 16] * 223 / 1969;
+					last_detect = i;
 				}
 
-				out_cnt += 2;
-				bps_cnt += 2;
+				med_cnt++;
+				med_cnt = med_cnt % 16;
+
+				data_cnt = 0;
+				base_flag = 0;
 			}
-
-			if (med[med_cnt] > amp_limit * th1) {
-				med_lv[med_cnt] = 1;
+			else if (abs(in_buf[i]) >= amp_limit * th0 && search_step == 0) {
+				base_flag = 1;
 			}
-			else if (med[med_cnt] < -amp_limit * th1) {
-				med_lv[med_cnt] = -1;
+			//入力の絶対値が、振幅の取り得る値の最低値/2よりも小さい場合(decodeモード)
+			else if (abs(in_buf[i]-base) < amp_limit * th1 && base_flag == 1 && search_step == 1) {
+				med[med_cnt] = maximum(&in_buf[i - data_cnt + 1], data_cnt - 1, base);
+				//med[med_cnt] = in_buf[i - (int)(data_cnt / 2.0 ) ] - base;
+
+				if (med_lv[(med_cnt + 15) % 16] == 1) {
+					out = out << quant_bit;
+					if (med[med_cnt] > 0) {
+						out += 0b1;
+						med[med_cnt] -= 2 * amp_limit;
+
+						base += (int)((med[med_cnt] + amp_limit * (2910.0 / 2048.0)) * alpha);
+					}
+					else {
+						out += 0b0;
+
+						base += (int)((med[med_cnt] + amp_limit * (1746.0 / 2048.0)) * alpha);
+					}
+
+					out_cnt += quant_bit;
+					bps_cnt += quant_bit;
+				}
+				if (med_lv[(med_cnt + 15) % 16] == -1) {
+					out = out << quant_bit;
+					if (med[med_cnt] < 0) {
+						out += 0b1;
+						med[med_cnt] += 2 * amp_limit;
+
+						base += (int)((med[med_cnt] - amp_limit * (2910.0 / 2048.0)) * alpha);
+					}
+					else {
+						out += 0b0;
+
+						base += (int)((med[med_cnt] - amp_limit * (1746.0 / 2048.0)) * alpha);
+					}
+
+					out_cnt += quant_bit;
+					bps_cnt += quant_bit;
+				}
+
+				if (med[med_cnt] > 0) {
+					med_lv[med_cnt] = 1;
+				}
+				else if (med[med_cnt] < 0) {
+					med_lv[med_cnt] = -1;
+				}
+
+				if (out_cnt % 16 == 0 && abs(med_lv[med_cnt]) == 1) {
+					out_buf[(int)(out_cnt / 16) - 1] = out;
+
+					out = 0;
+				}
+
+				med_cnt++;
+				med_cnt = med_cnt % 16;
+
+				data_cnt = 0;
+				last_detect = i;
+				base_flag = 0;
 			}
-			else {
-				med_lv[med_cnt] = 0;
-				base = med[med_cnt] + base;
+			else if (abs(in_buf[i]-base) >= amp_limit * th1 && search_step == 1) {
+				base_flag = 1;
 			}
-
-			if (out_cnt % 16 == 0 && abs(med_lv[med_cnt]) == 1) {
-				out_buf[(int)(out_cnt / 16) - 1] = out;
-
-				out = 0;
-			}
-
-			med_cnt++;
-			med_cnt = med_cnt % 16;
-
-			data_cnt = 0;
-			last_detect = i;
 		}
 
 		if (i % header->sample_rate == 0) {
@@ -253,6 +358,19 @@ int am_decode(struct RIFF_HEADER* header, FILE* fin, FILE* fout) {
 			bps_cnt = 0;
 		}
 
+		if (out_cnt >= BIOS_SIZE_SHORT * 16) {
+			break;
+		}
+
+	}
+	if ((out_cnt % 16) != 0) {
+		for (i = 0; i < 16 - (out_cnt % 16); i++) {
+			out = out << 1;
+			out += 0b0;
+		}
+		out_cnt += i;
+		out_buf[(int)(out_cnt / 16) - 1] = out;
+		out = 0;
 	}
 	fwrite(out_buf, sizeof(short), (int)(out_cnt / 16), fout);
 
@@ -269,13 +387,13 @@ int main(int argc, char** argv) {
 	FILE* fin=NULL, * fout=NULL;
 	int i;
 	int io_flag = 0;
-	READ_MODE mode = AM_MONO;
+	READ_MODE mode = AM_MONO_HIGH;
 	struct RIFF_HEADER header;
 
 	if (argc < 3) {
 		fprintf(stderr, "nbd_decoder.exe -m [mode] [in.wav] [out.bin]\n");
-		fprintf(stderr, "mode:am_mono am_stereo\n");
-		fprintf(stderr, "   (default) %s\n", "am_mono");
+		fprintf(stderr, "mode:am_mono_high am_mono_low am_stereo_high am_stereo_low\n");
+		fprintf(stderr, "   (default) %s\n", "am_mono_high");
 		return -1;
 	}
 	for (i = 1; i < argc; i++) {
@@ -287,11 +405,17 @@ int main(int argc, char** argv) {
 					fprintf(stderr, "argument error\n");
 					return -1;
 				}
-				if (!strcmp(argv[i], "am_mono")) {
-					mode = AM_MONO;
+				if (!strcmp(argv[i], "am_mono_high")) {
+					mode = AM_MONO_HIGH;
 				}
-				else if (!strcmp(argv[i], "am_stereo")) {
-					mode = AM_STEREO;
+				else if (!strcmp(argv[i], "am_mono_low")) {
+					mode = AM_MONO_LOW;
+				}
+				else if (!strcmp(argv[i], "am_stereo_high")) {
+					mode = AM_STEREO_HIGH;
+				}
+				else if (!strcmp(argv[i], "am_stereo_low")) {
+					mode = AM_STEREO_LOW;
 				}
 				else {
 					mode = DEF_MODE;
@@ -353,11 +477,19 @@ int main(int argc, char** argv) {
 	}
 	
 	switch (mode) {
-	case AM_MONO:
-		am_decode(&header, fin, fout);
+	case AM_MONO_HIGH:
+		am_decode(&header, 2, fin, fout);
+		break;
+
+	case AM_MONO_LOW:
+		am_decode(&header, 1, fin, fout);
 		break;
 		
-	case AM_STEREO:
+	case AM_STEREO_HIGH:
+		fprintf(stderr, "am_stereo mode is unimplemented\n");
+		break;
+
+	case AM_STEREO_LOW:
 		fprintf(stderr, "am_stereo mode is unimplemented\n");
 		break;
 

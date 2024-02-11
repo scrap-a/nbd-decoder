@@ -24,11 +24,13 @@ struct RIFF_HEADER
 
 typedef enum
 {
-	AM_MONO,
-	AM_STEREO,
+	AM_MONO_HIGH,
+	AM_MONO_LOW,
+	AM_STEREO_HIGH,
+	AM_STEREO_LOW,
 }READ_MODE;
 
-#define DEF_MODE AM_MONO
+#define DEF_MODE AM_MONO_HIGH
 #define SAMPLE_MAX (32767)
 #define SAMPLE_MIN (-32768)
 #define RIFF_MARK 0x46464952	//"RIFF"
@@ -37,9 +39,13 @@ typedef enum
 #define BDEPTH_16 0x0010		//16bit
 #define DATA_MARK 0x61746164	//"data"
 
+#define BIOS_SIZE 0x80000
+#define BIOS_SIZE_SHORT (BIOS_SIZE/2)
+#define alpha  1.0
+
 
 int read_wavheader(struct RIFF_HEADER* header, FILE* fin);
 int compare(const void* a, const void* b);
 short median(short* buf, int size);
-short maximum(short* buf, int size);
-int am_decode(struct RIFF_HEADER* header, FILE* fin, FILE* fout);
+short maximum(short* buf, int size, int base);
+int am_decode(struct RIFF_HEADER* header, int quant_bit, FILE* fin, FILE* fout);

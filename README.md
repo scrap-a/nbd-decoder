@@ -7,6 +7,6 @@
 
 ```
 nbd_decoder.exe -m [mode] [in.wav] [out.bin]
-mode:am_mono am_stereo
-   (default) am_mono
+  mode:am_mono_high am_mono_low
+   (default) am_mono_high
 ```
