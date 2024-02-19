@@ -30,7 +30,7 @@ typedef enum
 	AM_STEREO_LOW,
 }READ_MODE;
 
-#define DEF_MODE AM_MONO_HIGH
+#define DEF_MODE AM_MONO_LOW
 #define SAMPLE_MAX (32767)
 #define SAMPLE_MIN (-32768)
 #define RIFF_MARK 0x46464952	//"RIFF"

@@ -387,13 +387,13 @@ int main(int argc, char** argv) {
 	FILE* fin=NULL, * fout=NULL;
 	int i;
 	int io_flag = 0;
-	READ_MODE mode = AM_MONO_HIGH;
+	READ_MODE mode = AM_MONO_LOW;
 	struct RIFF_HEADER header;
 
 	if (argc < 3) {
 		fprintf(stderr, "nbd_decoder.exe -m [mode] [in.wav] [out.bin]\n");
-		fprintf(stderr, "mode:am_mono_high am_mono_low am_stereo_high am_stereo_low\n");
-		fprintf(stderr, "   (default) %s\n", "am_mono_high");
+		fprintf(stderr, "mode:am_mono_low am_mono_high \n");
+		fprintf(stderr, "   (default) %s\n", "am_mono_low");
 		return -1;
 	}
 	for (i = 1; i < argc; i++) {
