@@ -7,6 +7,7 @@
 #include <math.h>
 #include <string.h>
 #include "nbd_decoder.h"
+#include "crc_table.h"
 
 int read_wavheader(struct RIFF_HEADER* header, FILE* fin) {
 	int ret = 0;
@@ -86,6 +87,8 @@ int am_decode(struct RIFF_HEADER* header, int quant_bit, FILE* fin, FILE* fout) 
 	int bps_cnt = 0;			//bpsカウント(デバッグ)
 	int last_detect = 0x7FFFFFFF;	//最後にデータ出力が確定したサンプル
 	int base_flag = 0;
+
+	unsigned long crc = 0xFFFFFFFF;	//CRC32の算出用変数
 
 	out_buf = malloc(sizeof(unsigned char) * BIOS_SIZE);
 	memset(out_buf, 0, BIOS_SIZE);
@@ -240,6 +243,7 @@ int am_decode(struct RIFF_HEADER* header, int quant_bit, FILE* fin, FILE* fout) 
 
 				if (out_cnt % 8 == 0 && abs(med_lv[med_cnt]) == 1) {
 					out_buf[(int)(out_cnt / 8) - 1] = out;
+					crc = crc_table[(crc ^ out) & 0xFF] ^ (crc >> 8);
 
 					out = 0;
 				}
@@ -336,6 +340,7 @@ int am_decode(struct RIFF_HEADER* header, int quant_bit, FILE* fin, FILE* fout) 
 
 				if (out_cnt % 8 == 0 && abs(med_lv[med_cnt]) == 1) {
 					out_buf[(int)(out_cnt / 8) - 1] = out;
+					crc = crc_table[(crc ^ out) & 0xFF] ^ (crc >> 8);
 
 					out = 0;
 				}
@@ -370,11 +375,13 @@ int am_decode(struct RIFF_HEADER* header, int quant_bit, FILE* fin, FILE* fout) 
 		}
 		out_cnt += i;
 		out_buf[(int)(out_cnt / 8) - 1] = out;
+		crc = crc_table[(crc ^ out) & 0xFF] ^ (crc >> 8);
 		out = 0;
 	}
 	fwrite(out_buf, sizeof(unsigned char), (int)(out_cnt / 8), fout);
 
 	printf("100 [%%] finished\n");
+	printf("CRC:%X", ~crc);
 
 	free(in_buf);
 	free(out_buf);
