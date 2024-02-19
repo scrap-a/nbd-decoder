@@ -78,17 +78,17 @@ int am_decode(struct RIFF_HEADER* header, int quant_bit, FILE* fin, FILE* fout) 
 	const float th3 = (float)1.137;	// (1552+1552/4+1552/8 +1552/8) / 2048
 	const float th4 = (float)1.326;	// (1552+1552/2+1552/8 +1552/8) / 2048
 
-	short out = 0;				//出力値(2Byte分)
+	unsigned char out = 0;				//出力値(1Byte分)
 	int out_cnt = 0;			//出力のbit数
-	short* out_buf;				//全出力値のバッファ
+	unsigned char* out_buf;				//全出力値のバッファ
 	short* in_buf;				//ch毎の入力値バッファ
 	short* in_buf2;				//全chの入力値バッファ
 	int bps_cnt = 0;			//bpsカウント(デバッグ)
 	int last_detect = 0x7FFFFFFF;	//最後にデータ出力が確定したサンプル
 	int base_flag = 0;
 
-	out_buf = malloc(sizeof(short) * BIOS_SIZE_SHORT);
-	memset(out_buf, 0, BIOS_SIZE_SHORT);
+	out_buf = malloc(sizeof(unsigned char) * BIOS_SIZE);
+	memset(out_buf, 0, BIOS_SIZE);
 	memset(med, 0, sizeof(int) * 16);
 	memset(med_lv, 0, sizeof(int) * 16);
 
@@ -238,8 +238,8 @@ int am_decode(struct RIFF_HEADER* header, int quant_bit, FILE* fin, FILE* fout) 
 					base = med[med_cnt] + base;
 				}
 
-				if (out_cnt % 16 == 0 && abs(med_lv[med_cnt]) == 1) {
-					out_buf[(int)(out_cnt / 16) - 1] = out;
+				if (out_cnt % 8 == 0 && abs(med_lv[med_cnt]) == 1) {
+					out_buf[(int)(out_cnt / 8) - 1] = out;
 
 					out = 0;
 				}
@@ -334,8 +334,8 @@ int am_decode(struct RIFF_HEADER* header, int quant_bit, FILE* fin, FILE* fout) 
 					med_lv[med_cnt] = -1;
 				}
 
-				if (out_cnt % 16 == 0 && abs(med_lv[med_cnt]) == 1) {
-					out_buf[(int)(out_cnt / 16) - 1] = out;
+				if (out_cnt % 8 == 0 && abs(med_lv[med_cnt]) == 1) {
+					out_buf[(int)(out_cnt / 8) - 1] = out;
 
 					out = 0;
 				}
@@ -358,21 +358,21 @@ int am_decode(struct RIFF_HEADER* header, int quant_bit, FILE* fin, FILE* fout) 
 			bps_cnt = 0;
 		}
 
-		if (out_cnt >= BIOS_SIZE_SHORT * 16) {
+		if (out_cnt >= BIOS_SIZE * 8) {
 			break;
 		}
 
 	}
-	if ((out_cnt % 16) != 0) {
-		for (i = 0; i < 16 - (out_cnt % 16); i++) {
+	if ((out_cnt % 8) != 0) {
+		for (i = 0; i < 8 - (out_cnt % 8); i++) {
 			out = out << 1;
 			out += 0b0;
 		}
 		out_cnt += i;
-		out_buf[(int)(out_cnt / 16) - 1] = out;
+		out_buf[(int)(out_cnt / 8) - 1] = out;
 		out = 0;
 	}
-	fwrite(out_buf, sizeof(short), (int)(out_cnt / 16), fout);
+	fwrite(out_buf, sizeof(unsigned char), (int)(out_cnt / 8), fout);
 
 	printf("100 [%%] finished\n");
 
