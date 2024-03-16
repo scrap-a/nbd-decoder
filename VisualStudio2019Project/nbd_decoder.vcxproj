@@ -143,6 +143,7 @@
     <ClCompile Include="src\nbd_decoder.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\crc_table.h" />
     <ClInclude Include="src\nbd_decoder.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

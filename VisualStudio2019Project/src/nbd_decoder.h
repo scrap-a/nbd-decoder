@@ -41,7 +41,10 @@ typedef enum
 
 #define BIOS_SIZE 0x80000
 #define BIOS_SIZE_SHORT (BIOS_SIZE/2)
+#define SAVE_SIZE 0x2000
 #define alpha  1.0
+
+#define TRIAL_NUM 10
 
 
 int read_wavheader(struct RIFF_HEADER* header, FILE* fin);
